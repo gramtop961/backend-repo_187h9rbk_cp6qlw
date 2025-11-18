@@ -1,15 +1,22 @@
 INFO:     Will watch for changes in these directories: ['/home/workspace']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [233] using StatReload
-INFO:     Started server process [235]
+INFO:     Started reloader process [282] using StatReload
+INFO:     Started server process [284]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     172.20.0.1:49954 - "GET /recipes/trending HTTP/1.1" 200 OK
-INFO:     172.20.0.1:49956 - "GET /ingredients/trending HTTP/1.1" 200 OK
-INFO:     172.20.0.1:49954 - "GET /recipes/trending HTTP/1.1" 200 OK
-INFO:     172.20.0.1:49956 - "GET /ingredients/trending HTTP/1.1" 200 OK
-INFO:     172.20.0.1:49968 - "HEAD / HTTP/1.1" 405 Method Not Allowed
-INFO:     172.20.0.1:34786 - "GET /recipes/trending HTTP/1.1" 200 OK
-INFO:     172.20.0.1:34796 - "GET /ingredients/trending HTTP/1.1" 200 OK
-INFO:     172.20.0.1:34796 - "GET /ingredients/trending HTTP/1.1" 200 OK
-INFO:     172.20.0.1:34786 - "GET /recipes/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:44494 - "HEAD / HTTP/1.1" 405 Method Not Allowed
+INFO:     172.20.0.1:44458 - "GET /recipes/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:44474 - "GET /ingredients/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:44458 - "GET /recipes/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:44474 - "GET /ingredients/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:44488 - "GET /recipes/recommended?user_id=691c32f78c69cad04796ef84 HTTP/1.1" 200 OK
+INFO:     172.20.0.1:44510 - "GET /recipes/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:44510 - "GET /ingredients/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:39930 - "GET /recipes/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:39922 - "GET /recipes/recommended?user_id=691c32f78c69cad04796ef84 HTTP/1.1" 200 OK
+INFO:     172.20.0.1:44510 - "GET /ingredients/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:39942 - "GET /recipes/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:39942 - "GET /ingredients/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:55790 - "GET /recipes/trending HTTP/1.1" 200 OK
+INFO:     172.20.0.1:55780 - "GET /recipes/recommended?user_id=691c32f78c69cad04796ef84 HTTP/1.1" 200 OK
+INFO:     172.20.0.1:39942 - "GET /ingredients/trending HTTP/1.1" 200 OK

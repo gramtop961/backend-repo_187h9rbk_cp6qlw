@@ -125,6 +125,7 @@ class IngredientIn(BaseModel):
     unit: Optional[str] = None
     calories_per_unit: Optional[float] = None
     tags: List[str] = []
+    popularity: Optional[int] = 0
 
 
 @app.post("/ingredients")
@@ -139,6 +140,16 @@ def list_ingredients(q: Optional[str] = None, limit: int = 100):
     if q:
         flt = {"name": {"$regex": q, "$options": "i"}}
     docs = get_documents("ingredient", flt, limit)
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    return docs
+
+
+@app.get("/ingredients/trending")
+def trending_ingredients(limit: int = 8):
+    # sort by popularity desc then created_at desc
+    cur = collection("ingredient").find({}).sort([( "popularity", -1 ), ("created_at", -1 )]).limit(limit)
+    docs = list(cur)
     for d in docs:
         d["id"] = str(d.pop("_id"))
     return docs
@@ -191,6 +202,7 @@ class RecipeIn(BaseModel):
     steps: List[str] = []
     calories: Optional[float] = None
     author_user_id: Optional[str] = None
+    popularity: Optional[int] = 0
 
 
 @app.post("/recipes")
@@ -212,6 +224,57 @@ def list_recipes(q: Optional[str] = None, tag: Optional[str] = None, type: Optio
     for d in docs:
         d["id"] = str(d.pop("_id"))
     return docs
+
+
+@app.get("/recipes/trending")
+def trending_recipes(limit: int = 8):
+    cur = collection("recipe").find({}).sort([( "popularity", -1 ), ("created_at", -1 )]).limit(limit)
+    docs = list(cur)
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    return docs
+
+
+@app.get("/recipes/recommended")
+def recommended_recipes(user_id: str = Query(...), limit: int = 8):
+    # find profiles for user and build preference sets
+    profs = list(collection("profile").find({"user_id": user_id}))
+    likes: set[str] = set()
+    dislikes: set[str] = set()
+    allergies: set[str] = set()
+    for p in profs:
+        likes.update([s.lower() for s in (p.get("likes") or [])])
+        dislikes.update([s.lower() for s in (p.get("dislikes") or [])])
+        allergies.update([s.lower() for s in (p.get("allergies") or [])])
+
+    # score recipes by likes/tags and exclude allergies
+    def score_doc(doc: Dict) -> int:
+        title = (doc.get("title") or "").lower()
+        tags = [t.lower() for t in (doc.get("tags") or [])]
+        # exclude if allergy appears
+        if any(a in title or a in tags for a in allergies):
+            return -999
+        s = 0
+        for l in likes:
+            if l in title or l in tags:
+                s += 3
+        for d in dislikes:
+            if d in title or d in tags:
+                s -= 2
+        s += int(doc.get("popularity") or 0)
+        return s
+
+    docs = list(collection("recipe").find({}))
+    ranked = sorted(docs, key=score_doc, reverse=True)
+    result = []
+    for d in ranked:
+        if len(result) >= limit:
+            break
+        if score_doc(d) <= -999:
+            continue
+        d["id"] = str(d.pop("_id"))
+        result.append(d)
+    return result
 
 
 # ---------------------- Meal Plans ----------------------
@@ -330,6 +393,117 @@ def ai_parse_recipe(url: str = Query(..., description="Social media or blog URL"
             steps = []
 
     return AIRecipeResponse(title=title, ingredients=possible, steps=steps, notes="Heuristic extraction. Refine manually if needed.")
+
+
+# ---------------------- Seed Data ----------------------
+
+class SeedResponse(BaseModel):
+    status: str
+    inserted: Dict[str, int]
+
+
+@app.post("/seed", response_model=SeedResponse)
+def seed_database(force: bool = False):
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not available")
+
+    inserted_counts = {"ingredient": 0, "product": 0, "recipe": 0}
+
+    # Only seed if collections empty unless force=True
+    def is_empty(name: str) -> bool:
+        return collection(name).count_documents({}) == 0
+
+    # Ingredients
+    if force or is_empty("ingredient"):
+        ingredients = [
+            {"name": "Chicken Breast", "unit": "g", "calories_per_unit": 1.65, "tags": ["protein", "meat", "low-fat"], "popularity": 90},
+            {"name": "Olive Oil", "unit": "tbsp", "calories_per_unit": 119, "tags": ["fat", "oil", "mediterranean"], "popularity": 85},
+            {"name": "Garlic", "unit": "clove", "calories_per_unit": 4, "tags": ["aroma", "vegan"], "popularity": 80},
+            {"name": "Basil", "unit": "g", "calories_per_unit": 2.3, "tags": ["herb", "vegan"], "popularity": 60},
+            {"name": "Tomato", "unit": "g", "calories_per_unit": 0.18, "tags": ["vegan", "vegetable"], "popularity": 88},
+            {"name": "Parmesan", "unit": "g", "calories_per_unit": 4.3, "tags": ["dairy"], "popularity": 70},
+            {"name": "Spaghetti", "unit": "g", "calories_per_unit": 3.57, "tags": ["pasta", "grain"], "popularity": 92},
+            {"name": "Egg", "unit": "pcs", "calories_per_unit": 78, "tags": ["protein", "vegetarian"], "popularity": 75},
+        ]
+        res = collection("ingredient").insert_many([{**ing, "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)} for ing in ingredients])
+        inserted_counts["ingredient"] = len(res.inserted_ids)
+
+    # Products (example)
+    if force or is_empty("product"):
+        products = [
+            {"name": "Extra Virgin Olive Oil", "brand": "De Cecco", "unit_size": "500ml", "calories_total": 8840},
+            {"name": "Parmigiano Reggiano", "brand": "Zanetti", "unit_size": "200g", "calories_total": 860},
+        ]
+        res = collection("product").insert_many([{**p, "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)} for p in products])
+        inserted_counts["product"] = len(res.inserted_ids)
+
+    # Recipes
+    if force or is_empty("recipe"):
+        recipes = [
+            {
+                "title": "Classic Spaghetti Pomodoro",
+                "description": "Simple and bright tomato-basil pasta.",
+                "type": "dinner",
+                "tags": ["pasta", "vegetarian", "italian"],
+                "allergy_rating": "contains gluten",
+                "ingredients": [
+                    {"name": "Spaghetti", "quantity": 200, "unit": "g"},
+                    {"name": "Tomato", "quantity": 400, "unit": "g"},
+                    {"name": "Garlic", "quantity": 2, "unit": "clove"},
+                    {"name": "Basil", "quantity": 10, "unit": "g"},
+                    {"name": "Olive Oil", "quantity": 2, "unit": "tbsp"},
+                    {"name": "Parmesan", "quantity": 30, "unit": "g"},
+                ],
+                "steps": [
+                    "Boil salted water and cook spaghetti until al dente.",
+                    "Sauté garlic in olive oil, add tomatoes, simmer 10 mins.",
+                    "Toss pasta with sauce, finish with basil and parmesan.",
+                ],
+                "calories": 680,
+                "popularity": 96,
+            },
+            {
+                "title": "Garlic Herb Chicken",
+                "description": "Juicy chicken breasts with garlic and herbs.",
+                "type": "dinner",
+                "tags": ["high-protein", "gluten-free"],
+                "allergy_rating": "—",
+                "ingredients": [
+                    {"name": "Chicken Breast", "quantity": 500, "unit": "g"},
+                    {"name": "Garlic", "quantity": 3, "unit": "clove"},
+                    {"name": "Olive Oil", "quantity": 1, "unit": "tbsp"},
+                    {"name": "Basil", "quantity": 5, "unit": "g"},
+                ],
+                "steps": [
+                    "Season chicken, sear in olive oil until golden.",
+                    "Add garlic and herbs, finish in oven until cooked.",
+                ],
+                "calories": 520,
+                "popularity": 89,
+            },
+            {
+                "title": "Fluffy Scrambled Eggs",
+                "description": "Creamy soft-scrambled eggs, perfect breakfast.",
+                "type": "breakfast",
+                "tags": ["vegetarian", "quick"],
+                "allergy_rating": "contains egg, dairy",
+                "ingredients": [
+                    {"name": "Egg", "quantity": 4, "unit": "pcs"},
+                    {"name": "Butter", "quantity": 10, "unit": "g"},
+                    {"name": "Salt", "quantity": 1, "unit": "pinch"},
+                ],
+                "steps": [
+                    "Whisk eggs with a pinch of salt.",
+                    "Stir slowly over low heat with butter until just set.",
+                ],
+                "calories": 320,
+                "popularity": 78,
+            },
+        ]
+        res = collection("recipe").insert_many([{**r, "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)} for r in recipes])
+        inserted_counts["recipe"] = len(res.inserted_ids)
+
+    return SeedResponse(status="ok", inserted=inserted_counts)
 
 
 # ---------------------- Root & Health ----------------------
